@@ -11,14 +11,22 @@ TIMEFRAME = '1Min'
 ATTRGROUP = 'TICK'
 
 
-def convert(data):
+def convert(data, with_nanoseconds=False):
     """
-    NOTE: This removes any time information after the second so no test
-          including data with time info more precise than second can succeed
-          for now...
+    NOTE: Normal write interface removes any time information after the second
+          so no test including data with time info more precise than second
+          can succeed for now...
+
+          To overcome this, we :
+          - add manually a Nanosecond field DONE
+          - add the nanesecond field to the index at query time. TODO
     """
     data = data.copy()
     total_ns = data.index.astype(np.int64)
+
+    if with_nanoseconds:
+        data['Nanosecond'] = total_ns % (10 ** 9)
+
     data.index = total_ns // 10 ** 9
     data.index.name = 'Epoch'
     records = data.to_records(index=True)
@@ -87,17 +95,17 @@ def db():
     return db
 
 
-@pytest.mark.parametrize('symbol', [
-    ('TEST_SIMPLE_TICK'),
-    ('TEST_DUPLICATES_TICK'),
-    ('TEST_MULTIPLE_TICK_IN_TIMEFRAME'),
-    ('TEST_MILLISECOND_EPOCH'),
-    ('TEST_MILLISECOND_EPOCH_SAME_TIMEFRAME')
+@pytest.mark.parametrize('symbol, with_nanoseconds', [
+    ('TEST_SIMPLE_TICK', False),
+    ('TEST_DUPLICATES_TICK', False),
+    ('TEST_MULTIPLE_TICK_IN_TIMEFRAME', False),
+    ('TEST_MILLISECOND_EPOCH', True),
+    ('TEST_MILLISECOND_EPOCH_SAME_TIMEFRAME', True)
 ])
-def test_integrity_ticks(db, symbol):
+def test_integrity_ticks(db, symbol, with_nanoseconds):
     data = db[symbol]
 
-    records = convert(data)
+    records = convert(data, with_nanoseconds=with_nanoseconds)
     tbk = get_tbk(symbol, TIMEFRAME, ATTRGROUP)
     ret = client.write(records, tbk)
     print("Msg ret: {}".format(ret))
